@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Rapor SMP (V45.30 - Fix AI Key)</title>
+    <title>Sistem Rapor SMP (V45.31 - Fix Delete Modals)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Menggunakan UNPKG untuk Lucide Icons agar lebih stabil -->
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -83,7 +83,7 @@
                 dinasName: "PEMERINTAH KABUPATEN ...", schoolName: "SMP NEGERI ...", schoolAddress: "Alamat Sekolah...", 
                 headmaster: "Nama Kepala Sekolah", headmasterNip: "198xxxx", semester: "Ganjil", year: "2024/2025", 
                 logoDinas: "", logoSekolah: "", printPlace: "Kota", printDate: "",
-                geminiApiKey: "" // Menambahkan field untuk API Key
+                geminiApiKey: "" 
             },
             selectedClass: '7A', selectedMapel: 'Matematika', selectedStudentForPrint: null,
             showModal: false, activeStudentId: null, tempAchieved: [], tempImprove: [],
@@ -116,7 +116,6 @@
             return mapel;
         };
 
-        // Icon helper for student dashboard
         const getSubjectIcon = (subjectName) => {
             const name = subjectName.toLowerCase();
             if (name.includes('matematika')) return 'calculator';
@@ -233,15 +232,12 @@
                 const btn = document.getElementById(`btn-analyze-${studentId}`);
                 if (!btn) return;
                 
-                // Cek API Key dari Pengaturan
                 const userApiKey = state.settings.geminiApiKey;
-
                 if (!userApiKey) {
                     window.actions.showToast("Harap isi API Key Gemini di menu Pengaturan!", "error");
                     return;
                 }
 
-                // Loading state
                 const originalContent = btn.innerHTML;
                 btn.innerHTML = `<div class="loader w-3 h-3 border-2 border-white border-t-transparent"></div>`;
                 btn.disabled = true;
@@ -269,16 +265,7 @@
                 }
 
                 const avg = (total / count).toFixed(1);
-                // Prompt engineering for Gemini
-                const prompt = `Bertindaklah sebagai Wali Kelas SMP yang bijak. Buatkan catatan rapor singkat (maksimal 30 kata), personal, dan memotivasi untuk siswa bernama ${s.name}. 
-                Data Akademik:
-                - Rata-rata Nilai: ${avg}
-                - Detail Nilai: ${gradeDetails.join(', ')}
-                
-                Instruksi:
-                1. Berikan apresiasi pada pencapaian terbaiknya.
-                2. Berikan dorongan lembut untuk mata pelajaran yang nilainya rendah (jika ada).
-                3. Gunakan bahasa Indonesia yang formal namun hangat.`;
+                const prompt = `Bertindaklah sebagai Wali Kelas SMP yang bijak. Buatkan catatan rapor singkat (maksimal 30 kata), personal, dan memotivasi untuk siswa bernama ${s.name}. Data: Rata-rata ${avg}, Detail: ${gradeDetails.join(', ')}.`;
 
                 try {
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${userApiKey}`, {
@@ -288,11 +275,7 @@
                     });
                     
                     const data = await response.json();
-                    
-                    if (data.error) {
-                        console.error("Gemini Error:", data.error);
-                        throw new Error(data.error.message || "Gagal menghubungi AI");
-                    }
+                    if (data.error) throw new Error(data.error.message);
                     
                     const analysis = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
                     
@@ -300,12 +283,9 @@
                         const textarea = document.getElementById(`note-${studentId}`);
                         if (textarea) {
                             textarea.value = analysis.trim();
-                            // Trigger update state manually
                             window.actions.updateTeacherNote(studentId, textarea);
                             window.actions.showToast("Analisa AI berhasil dibuat!");
                         }
-                    } else {
-                        throw new Error("No output from AI");
                     }
                 } catch (e) {
                     console.error(e);
@@ -313,8 +293,7 @@
                 } finally {
                     btn.innerHTML = originalContent;
                     btn.disabled = false;
-                    // Re-init icons inside the updated DOM
-                     if (window.lucide) window.lucide.createIcons();
+                    if (window.lucide) window.lucide.createIcons();
                 }
             },
 
@@ -388,6 +367,7 @@
             saveHomeroom: async (c) => { const hr = state.homerooms.find(h => h.id === c); if(!hr) return; try { await setDoc(doc(db, 'homerooms', c), hr); window.actions.showToast('Data Wali Kelas tersimpan!'); } catch(e){} },
             addStudent: async () => { const n=document.getElementById('new-name').value; const i=document.getElementById('new-nis').value; if(!n||!i) return alert('Isi data!'); try { await addDoc(collection(db, 'students'), { name: n, nis: i, class: state.selectedClass, gender: 'L' }); document.getElementById('new-name').value=''; document.getElementById('new-nis').value=''; window.actions.showToast('Siswa ditambah!'); } catch(e) {} },
             
+            // --- DELETE ACTIONS ---
             openDeleteModal: (id) => { state.studentIdToDelete = id; state.showDeleteModal = true; window.render(); },
             closeDeleteModal: () => { state.showDeleteModal = false; state.studentIdToDelete = null; window.render(); },
             confirmDelete: async () => { if (state.studentIdToDelete) { try { await deleteDoc(doc(db, 'students', state.studentIdToDelete)); state.showDeleteModal = false; state.studentIdToDelete = null; window.actions.showToast("Data siswa berhasil dihapus."); window.render(); } catch (e) { window.actions.showToast("Gagal menghapus siswa.", 'error'); } } },
@@ -450,7 +430,7 @@
             state.loading = false; // No Firebase
         }
 
-        // Fix: Retry mechanism for Lucide icons
+        // Retry mechanism for Lucide icons
         const loadIcons = () => {
             if (window.lucide) {
                 window.lucide.createIcons();
@@ -461,7 +441,7 @@
 
         window.render = () => {
             const root = document.getElementById('app');
-            let modalHtml = ''; // Initialize modalHtml here to prevent reference error
+            let modalHtml = ''; // Declare modalHtml here
             
             const classStudents = state.students.filter(s => s.class === state.selectedClass);
             const filteredStudents = classStudents.filter(s => s.name.toLowerCase().includes(state.searchQuery));
@@ -482,7 +462,6 @@
                 if(state.showLoginModal) {
                     modalHtml = `<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-all"><div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm transform transition-all scale-100"><h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="lock" class="w-5 h-5"></i> Login Guru</h3><p class="text-sm text-slate-500 mb-4">Masukkan kode keamanan untuk mengakses panel admin.</p><div class="mb-4"><input type="password" id="admin-password-input" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-center text-lg font-bold tracking-widest" placeholder="• • • • • •" onkeyup="if(event.key==='Enter') window.actions.verifyLogin()">${state.loginError ? `<p class="text-xs text-red-500 mt-2 font-bold">${state.loginError}</p>` : ''}<p class="text-xs text-slate-400 mt-2 text-center">Kode Default: 123456</p></div><div class="flex gap-3"><button onclick="window.actions.closeLoginModal()" class="flex-1 px-4 py-2 border border-slate-300 text-slate-600 font-bold rounded-lg hover:bg-slate-50">Batal</button><button onclick="window.actions.verifyLogin()" class="flex-1 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700">Masuk</button></div></div></div>`;
                 }
-                // Append modal if exists
                 if (modalHtml) root.innerHTML += modalHtml;
                 loadIcons();
                 return;
@@ -494,7 +473,6 @@
                 return;
             }
 
-            // --- REDESIGNED STUDENT DASHBOARD ---
             if (state.view === 'student_dashboard' && state.currentStudent) {
                 const s = state.currentStudent;
                 const printSubjects = getSubjects(s.class);
@@ -507,7 +485,6 @@
                     if(g.score > 0) { totalNilai += g.score; countNilai++; }
                     const desc = generateDescription(g, sub);
                     const iconName = getSubjectIcon(sub);
-                    
                     let badgeClass = 'bg-slate-100 text-slate-600';
                     if (g.score >= 90) badgeClass = 'bg-emerald-100 text-emerald-700';
                     else if (g.score >= 80) badgeClass = 'bg-blue-100 text-blue-700';
@@ -517,14 +494,9 @@
                         <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm mb-4 relative overflow-hidden group">
                              <div class="absolute right-0 top-0 w-24 h-24 bg-slate-50 rounded-bl-full -mr-4 -mt-4 z-0 group-hover:bg-blue-50 transition-colors"></div>
                             <div class="flex items-start gap-4 relative z-10">
-                                <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                                    <i data-lucide="${iconName}" class="w-6 h-6"></i>
-                                </div>
+                                <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0"><i data-lucide="${iconName}" class="w-6 h-6"></i></div>
                                 <div class="flex-1">
-                                    <div class="flex justify-between items-center mb-1">
-                                        <h4 class="font-bold text-slate-800 text-sm">${sub}</h4>
-                                        <span class="${badgeClass} font-bold px-3 py-1 rounded-lg text-sm">${g.score || '-'}</span>
-                                    </div>
+                                    <div class="flex justify-between items-center mb-1"><h4 class="font-bold text-slate-800 text-sm">${sub}</h4><span class="${badgeClass} font-bold px-3 py-1 rounded-lg text-sm">${g.score || '-'}</span></div>
                                     <p class="text-xs text-slate-500 text-justify leading-relaxed line-clamp-3">${desc}</p>
                                 </div>
                             </div>
@@ -533,74 +505,7 @@
                 
                 const avg = countNilai > 0 ? (totalNilai / countNilai).toFixed(1) : 0;
 
-                root.innerHTML = `
-                    <div class="bg-slate-50 min-h-screen relative">
-                        <!-- Sticky Header -->
-                        <div class="bg-white/90 backdrop-blur-md sticky top-0 z-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center shadow-sm">
-                             <div class="flex items-center gap-2">
-                                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">R</div>
-                                <span class="font-bold text-slate-800 text-sm">Rapor Digital</span>
-                             </div>
-                             <button onclick="window.actions.logout()" class="text-slate-500 hover:text-red-500 transition-colors">
-                                <i data-lucide="log-out" class="w-5 h-5"></i>
-                             </button>
-                        </div>
-
-                        <!-- Hero Section -->
-                        <div class="bg-blue-600 text-white pt-8 pb-16 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
-                             <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-                             <div class="relative z-10 flex items-center gap-4">
-                                <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-2xl font-bold border-2 border-white/30 shadow-inner">
-                                    ${s.name.charAt(0)}
-                                </div>
-                                <div>
-                                    <h2 class="text-xl font-bold leading-tight">${s.name}</h2>
-                                    <p class="text-blue-100 text-sm mt-1 flex items-center gap-2">
-                                        <span class="bg-white/10 px-2 py-0.5 rounded text-xs">${s.nis}</span>
-                                        <span>Kelas ${s.class}</span>
-                                    </p>
-                                </div>
-                             </div>
-                        </div>
-
-                        <!-- Stats Card -->
-                        <div class="px-4 -mt-10 relative z-20 mb-2">
-                            <div class="bg-white p-4 rounded-2xl shadow-lg border border-slate-100 flex justify-between items-center">
-                                 <div class="flex items-center gap-3">
-                                     <div class="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
-                                         <i data-lucide="star" class="w-5 h-5"></i>
-                                     </div>
-                                     <div>
-                                         <p class="text-[10px] text-slate-400 font-bold uppercase">Rata-rata</p>
-                                         <p class="text-lg font-bold text-slate-800">${avg}</p>
-                                     </div>
-                                 </div>
-                                 <div class="h-8 w-px bg-slate-100"></div>
-                                 <div class="flex items-center gap-3">
-                                     <div class="w-10 h-10 rounded-full bg-violet-50 flex items-center justify-center text-violet-600">
-                                         <i data-lucide="calendar-check" class="w-5 h-5"></i>
-                                     </div>
-                                     <div class="text-right">
-                                         <p class="text-[10px] text-slate-400 font-bold uppercase">Hadir</p>
-                                         <p class="text-xs font-bold text-slate-800">S:${att.s} I:${att.i} A:${att.a}</p>
-                                     </div>
-                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Content List -->
-                        <div class="p-4 pb-20 space-y-4">
-                            <div class="flex items-center justify-between px-1">
-                                <h3 class="font-bold text-slate-700 text-sm">Hasil Belajar</h3>
-                                <span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">${state.settings.semester} ${state.settings.year}</span>
-                            </div>
-                            ${rows}
-                            <div class="text-center mt-8 p-4 bg-white/50 rounded-xl border border-slate-100">
-                                <p class="text-xs text-slate-400">Data ini hanya pratinjau digital.</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                root.innerHTML = `<div class="bg-slate-50 min-h-screen relative"><div class="bg-white/90 backdrop-blur-md sticky top-0 z-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center shadow-sm"><div class="flex items-center gap-2"><div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">R</div><span class="font-bold text-slate-800 text-sm">Rapor Digital</span></div><button onclick="window.actions.logout()" class="text-slate-500 hover:text-red-500 transition-colors"><i data-lucide="log-out" class="w-5 h-5"></i></button></div><div class="bg-blue-600 text-white pt-8 pb-16 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden"><div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div><div class="relative z-10 flex items-center gap-4"><div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-2xl font-bold border-2 border-white/30 shadow-inner">${s.name.charAt(0)}</div><div><h2 class="text-xl font-bold leading-tight">${s.name}</h2><p class="text-blue-100 text-sm mt-1 flex items-center gap-2"><span class="bg-white/10 px-2 py-0.5 rounded text-xs">${s.nis}</span><span>Kelas ${s.class}</span></p></div></div></div><div class="px-4 -mt-10 relative z-20 mb-2"><div class="bg-white p-4 rounded-2xl shadow-lg border border-slate-100 flex justify-between items-center"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-600"><i data-lucide="star" class="w-5 h-5"></i></div><div><p class="text-[10px] text-slate-400 font-bold uppercase">Rata-rata</p><p class="text-lg font-bold text-slate-800">${avg}</p></div></div><div class="h-8 w-px bg-slate-100"></div><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-violet-50 flex items-center justify-center text-violet-600"><i data-lucide="calendar-check" class="w-5 h-5"></i></div><div class="text-right"><p class="text-[10px] text-slate-400 font-bold uppercase">Hadir</p><p class="text-xs font-bold text-slate-800">S:${att.s} I:${att.i} A:${att.a}</p></div></div></div></div><div class="p-4 pb-20 space-y-4"><div class="flex items-center justify-between px-1"><h3 class="font-bold text-slate-700 text-sm">Hasil Belajar</h3><span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">${state.settings.semester} ${state.settings.year}</span></div>${rows}<div class="text-center mt-8 p-4 bg-white/50 rounded-xl border border-slate-100"><p class="text-xs text-slate-400">Data ini hanya pratinjau digital.</p></div></div></div>`;
                 loadIcons();
                 return;
             }
@@ -609,307 +514,78 @@
 
             // --- ADMIN VIEWS ---
             if (state.view === 'dashboard') {
+                 // ... dashboard logic ...
                  const totalStudents = state.students.length;
                  const globalFilled = state.grades.filter(g => g.score > 0).length;
                  const globalProg = (state.students.length * 10) > 0 ? Math.min(100, Math.round((globalFilled / (state.students.length * 10)) * 100)) : 0;
-                 const currentClass = state.selectedClass;
-                 const subjects = getSubjects(currentClass);
-                 const studentsInClass = state.students.filter(s => s.class === currentClass);
-                 const totalStudentsInClass = studentsInClass.length;
-                 
-                 const subjectAvgData = subjects.map(subj => {
-                    if (totalStudentsInClass === 0) return { subject: subj, avg: 0 };
-                    let totalScore = 0;
-                    let countScore = 0;
-                    studentsInClass.forEach(s => {
-                        const g = state.grades.find(gr => gr.studentId === s.id && gr.mapel === subj);
-                        if(g && g.score > 0) { totalScore += g.score; countScore++; }
-                    });
+                 const subjectAvgData = currentSubjects.map(subj => {
+                    const studentsInClass = state.students.filter(s => s.class === state.selectedClass);
+                    if (studentsInClass.length === 0) return { subject: subj, avg: 0 };
+                    let totalScore = 0; let countScore = 0;
+                    studentsInClass.forEach(s => { const g = state.grades.find(gr => gr.studentId === s.id && gr.mapel === subj); if(g && g.score > 0) { totalScore += g.score; countScore++; } });
                     const avg = countScore > 0 ? (totalScore / countScore).toFixed(1) : 0;
                     return { subject: subj, avg: parseFloat(avg) };
                  });
+                 const subjectProgressData = currentSubjects.map(subj => {
+                    const studentsInClass = state.students.filter(s => s.class === state.selectedClass);
+                    if (studentsInClass.length === 0) return { subject: subj, pct: 0, filled: 0, total: 0 };
+                    const filledCount = studentsInClass.reduce((acc, student) => { const hasGrade = state.grades.some(g => g.studentId === student.id && g.mapel === subj && g.score > 0); return acc + (hasGrade ? 1 : 0); }, 0);
+                    const pct = Math.round((filledCount / studentsInClass.length) * 100);
+                    return { subject: subj, pct, filled: filledCount, total: studentsInClass.length };
+                 });
+                 const progressHtml = subjectProgressData.length > 0 ? subjectProgressData.map(item => `<div class="flex items-center gap-3"><div class="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold ${item.pct === 100 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}">${item.pct}%</div><div class="flex-1"><h4 class="text-sm font-bold text-slate-700 truncate">${item.subject}</h4><div class="flex justify-between text-[10px] text-slate-400 mt-0.5"><span>${item.filled} dari ${item.total} siswa</span></div><div class="w-full bg-slate-100 rounded-full h-1.5 mt-1.5"><div class="bg-blue-600 h-1.5 rounded-full transition-all" style="width: ${item.pct}%"></div></div></div></div>`).join('') : '<p class="text-slate-500 italic text-sm p-4 bg-slate-50 rounded">Belum ada data siswa untuk kelas ini.</p>';
 
-                 const subjectProgressData = subjects.map(subj => {
-                    if (totalStudentsInClass === 0) return { subject: subj, pct: 0, filled: 0, total: 0 };
-                    const filledCount = studentsInClass.reduce((acc, student) => {
-                        const hasGrade = state.grades.some(g => g.studentId === student.id && g.mapel === subj && g.score > 0);
-                        return acc + (hasGrade ? 1 : 0);
-                    }, 0);
-                    const pct = Math.round((filledCount / totalStudentsInClass) * 100);
-                    return { subject: subj, pct, filled: filledCount, total: totalStudentsInClass };
-                });
-                
-                const progressHtml = subjectProgressData.length > 0 ? subjectProgressData.map(item => `
-                    <div class="flex items-center gap-3">
-                         <div class="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold ${item.pct === 100 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}">
-                            ${item.pct}%
-                        </div>
-                        <div class="flex-1">
-                            <h4 class="text-sm font-bold text-slate-700 truncate">${item.subject}</h4>
-                            <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
-                                <span>${item.filled} dari ${item.total} siswa</span>
-                            </div>
-                            <div class="w-full bg-slate-100 rounded-full h-1.5 mt-1.5">
-                                <div class="bg-blue-600 h-1.5 rounded-full transition-all" style="width: ${item.pct}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                `).join('') : '<p class="text-slate-500 italic text-sm p-4 bg-slate-50 rounded">Belum ada data siswa untuk kelas ini.</p>';
-
-                 mainContent = `
-                    <div class="max-w-6xl mx-auto space-y-8">
-                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div>
-                                <h2 class="text-2xl font-bold text-slate-800">Dashboard Akademik</h2>
-                                <p class="text-slate-500 text-sm">Ringkasan data dan progres penilaian siswa.</p>
-                            </div>
-                            <div class="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
-                                <i data-lucide="calendar" class="w-4 h-4 text-slate-400"></i>
-                                <span class="text-sm font-semibold text-slate-600">${state.settings.semester} ${state.settings.year}</span>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group">
-                                <div class="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 z-10"><i data-lucide="users" class="w-7 h-7"></i></div>
-                                <div class="z-10"><p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Siswa</p><h3 class="text-3xl font-bold text-slate-800">${totalStudents}</h3></div>
-                                <i data-lucide="users" class="absolute -right-4 -bottom-4 w-32 h-32 text-slate-50 opacity-50 group-hover:scale-110 transition-transform"></i>
-                            </div>
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group">
-                                <div class="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 z-10"><i data-lucide="database" class="w-7 h-7"></i></div>
-                                <div class="z-10"><p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Data Nilai</p><h3 class="text-3xl font-bold text-slate-800">${globalFilled}</h3></div>
-                                <i data-lucide="database" class="absolute -right-4 -bottom-4 w-32 h-32 text-slate-50 opacity-50 group-hover:scale-110 transition-transform"></i>
-                            </div>
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group">
-                                <div class="w-14 h-14 rounded-full bg-violet-50 flex items-center justify-center text-violet-600 z-10"><i data-lucide="bar-chart-3" class="w-7 h-7"></i></div>
-                                <div class="z-10"><p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Kelengkapan</p><h3 class="text-3xl font-bold text-slate-800">${globalProg}%</h3></div>
-                                <i data-lucide="bar-chart-3" class="absolute -right-4 -bottom-4 w-32 h-32 text-slate-50 opacity-50 group-hover:scale-110 transition-transform"></i>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                <div class="flex justify-between items-center mb-6">
-                                    <div><h3 class="font-bold text-slate-800 text-lg">Grafik Rata-rata Nilai</h3><p class="text-slate-400 text-xs">Perbandingan nilai rata-rata per mata pelajaran.</p></div>
-                                     <select onchange="window.actions.updateState('selectedClass', this.value)" class="text-sm border-none bg-slate-100 px-3 py-1.5 rounded-lg font-bold text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer hover:bg-slate-200 transition-colors">${getClassList().map(c => `<option value="${c}" ${state.selectedClass === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}</select>
-                                </div>
-                                <div class="space-y-4">
-                                    ${subjectAvgData.map(d => `<div class="group"><div class="flex justify-between text-xs mb-1"><span class="font-semibold text-slate-600 w-32 truncate">${d.subject}</span><span class="font-bold text-slate-800">${d.avg}</span></div><div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden"><div class="h-full rounded-full transition-all duration-1000 ease-out relative ${d.avg >= 85 ? 'bg-emerald-500' : (d.avg >= 75 ? 'bg-blue-500' : 'bg-amber-500')}" style="width: ${d.avg}%"><div class="absolute inset-0 bg-white/20 group-hover:bg-transparent transition-colors"></div></div></div></div>`).join('')}
-                                </div>
-                                ${subjectAvgData.every(d => d.avg === 0) ? '<p class="text-center text-slate-400 text-sm mt-4 italic">Belum ada data nilai untuk ditampilkan pada grafik ini.</p>' : ''}
-                            </div>
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full">
-                                 <div class="mb-6 pb-4 border-b border-slate-100"><h3 class="font-bold text-slate-800 text-lg">Progress Input</h3><p class="text-slate-400 text-xs">Status kelengkapan nilai siswa.</p></div>
-                                <div class="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-5">${progressHtml}</div>
-                                <button onclick="window.actions.navigate('input_nilai')" class="mt-6 w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 flex items-center justify-center gap-2 transition-all"><i data-lucide="plus-circle" class="w-4 h-4"></i> Input Nilai Baru</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                 mainContent = `<div class="max-w-6xl mx-auto space-y-8"><div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"><div><h2 class="text-2xl font-bold text-slate-800">Dashboard Akademik</h2><p class="text-slate-500 text-sm">Ringkasan data dan progres penilaian siswa.</p></div><div class="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200"><i data-lucide="calendar" class="w-4 h-4 text-slate-400"></i><span class="text-sm font-semibold text-slate-600">${state.settings.semester} ${state.settings.year}</span></div></div><div class="grid grid-cols-1 md:grid-cols-3 gap-6"><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group"><div class="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 z-10"><i data-lucide="users" class="w-7 h-7"></i></div><div class="z-10"><p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Siswa</p><h3 class="text-3xl font-bold text-slate-800">${totalStudents}</h3></div><i data-lucide="users" class="absolute -right-4 -bottom-4 w-32 h-32 text-slate-50 opacity-50 group-hover:scale-110 transition-transform"></i></div><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group"><div class="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 z-10"><i data-lucide="database" class="w-7 h-7"></i></div><div class="z-10"><p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Data Nilai</p><h3 class="text-3xl font-bold text-slate-800">${globalFilled}</h3></div><i data-lucide="database" class="absolute -right-4 -bottom-4 w-32 h-32 text-slate-50 opacity-50 group-hover:scale-110 transition-transform"></i></div><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group"><div class="w-14 h-14 rounded-full bg-violet-50 flex items-center justify-center text-violet-600 z-10"><i data-lucide="bar-chart-3" class="w-7 h-7"></i></div><div class="z-10"><p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Kelengkapan</p><h3 class="text-3xl font-bold text-slate-800">${globalProg}%</h3></div><i data-lucide="bar-chart-3" class="absolute -right-4 -bottom-4 w-32 h-32 text-slate-50 opacity-50 group-hover:scale-110 transition-transform"></i></div></div><div class="grid grid-cols-1 lg:grid-cols-3 gap-8"><div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex justify-between items-center mb-6"><div><h3 class="font-bold text-slate-800 text-lg">Grafik Rata-rata Nilai</h3><p class="text-slate-400 text-xs">Perbandingan nilai rata-rata per mata pelajaran.</p></div><select onchange="window.actions.updateState('selectedClass', this.value)" class="text-sm border-none bg-slate-100 px-3 py-1.5 rounded-lg font-bold text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer hover:bg-slate-200 transition-colors">${getClassList().map(c => `<option value="${c}" ${state.selectedClass === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}</select></div><div class="space-y-4">${subjectAvgData.map(d => `<div class="group"><div class="flex justify-between text-xs mb-1"><span class="font-semibold text-slate-600 w-32 truncate">${d.subject}</span><span class="font-bold text-slate-800">${d.avg}</span></div><div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden"><div class="h-full rounded-full transition-all duration-1000 ease-out relative ${d.avg >= 85 ? 'bg-emerald-500' : (d.avg >= 75 ? 'bg-blue-500' : 'bg-amber-500')}" style="width: ${d.avg}%"><div class="absolute inset-0 bg-white/20 group-hover:bg-transparent transition-colors"></div></div></div></div>`).join('')}</div>${subjectAvgData.every(d => d.avg === 0) ? '<p class="text-center text-slate-400 text-sm mt-4 italic">Belum ada data nilai untuk ditampilkan pada grafik ini.</p>' : ''}</div><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full"><div class="mb-6 pb-4 border-b border-slate-100"><h3 class="font-bold text-slate-800 text-lg">Progress Input</h3><p class="text-slate-400 text-xs">Status kelengkapan nilai siswa.</p></div><div class="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-5">${progressHtml}</div><button onclick="window.actions.navigate('input_nilai')" class="mt-6 w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 flex items-center justify-center gap-2 transition-all"><i data-lucide="plus-circle" class="w-4 h-4"></i> Input Nilai Baru</button></div></div></div>`;
             } else if (state.view === 'input_nilai') {
                 const rows = filteredStudents.map((s, idx) => {
                     const grade = state.grades.find(g => g.studentId === s.id && g.mapel === state.selectedMapel) || {};
                     const hasTP = (grade.tp_achieved?.length > 0 || grade.tp_improvement?.length > 0);
-                    return `
-                        <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                            <td class="p-4 text-center text-sm text-slate-500">${idx + 1}</td>
-                            <td class="p-4 font-bold text-slate-700">${s.name}</td>
-                            <td class="p-4 text-center">
-                                <input type="number" value="${grade.score || ''}" onchange="window.actions.updateGradeScore('${s.id}', this)" class="w-24 text-center border-2 border-slate-200 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-slate-700 ${grade.score > 100 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white'}" placeholder="0-100">
-                            </td>
-                            <td class="p-4 text-center">
-                                <button onclick="window.actions.openTPModal('${s.id}')" class="px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 mx-auto ${hasTP ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
-                                    <i data-lucide="${hasTP ? 'check-circle-2' : 'plus-circle'}" class="w-4 h-4"></i>
-                                    ${hasTP ? 'TP Terisi' : 'Pilih TP'}
-                                </button>
-                            </td>
-                            <td class="p-4 text-center">
-                                <button onclick="window.actions.manualSaveGrade('${s.id}')" class="flex items-center justify-center gap-2 mx-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-md active:scale-95 w-full">
-                                    <i data-lucide="save" class="w-4 h-4"></i> Simpan
-                                </button>
-                            </td>
-                        </tr>
-                    `;
+                    return `<tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors"><td class="p-4 text-center text-sm text-slate-500">${idx + 1}</td><td class="p-4 font-bold text-slate-700">${s.name}</td><td class="p-4 text-center"><input type="number" value="${grade.score || ''}" onchange="window.actions.updateGradeScore('${s.id}', this)" class="w-24 text-center border-2 border-slate-200 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-bold text-slate-700 ${grade.score > 100 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white'}" placeholder="0-100"></td><td class="p-4 text-center"><button onclick="window.actions.openTPModal('${s.id}')" class="px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 mx-auto ${hasTP ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"><i data-lucide="${hasTP ? 'check-circle-2' : 'plus-circle'}" class="w-4 h-4"></i>${hasTP ? 'TP Terisi' : 'Pilih TP'}</button></td><td class="p-4 text-center"><button onclick="window.actions.manualSaveGrade('${s.id}')" class="flex items-center justify-center gap-2 mx-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-md active:scale-95 w-full"><i data-lucide="save" class="w-4 h-4"></i> Simpan</button></td></tr>`;
                 }).join('');
-                mainContent = `
-                    <div class="max-w-6xl mx-auto space-y-6">
-                        <div class="flex flex-col md:flex-row justify-between items-end gap-4">
-                            <div><h2 class="text-2xl font-bold text-slate-800">Input Nilai Akademik</h2><p class="text-slate-500 text-sm">Masukan nilai akhir dan pilih capaian kompetensi siswa.</p></div>
-                        </div>
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                            <div class="flex flex-col sm:flex-row gap-4 mb-6 pb-6 border-b border-slate-100">
-                                <div class="relative w-full sm:w-48"><i data-lucide="users" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('selectedClass', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white">${renderClassOptions()}</select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div>
-                                <div class="relative w-full sm:w-64"><i data-lucide="book-open" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('selectedMapel', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white">${currentSubjects.map(m => `<option value="${m}" ${state.selectedMapel === m ? 'selected' : ''}>${m}</option>`).join('')}</select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div>
-                            </div>
-                            <div class="overflow-hidden rounded-xl border border-slate-100">
-                                <table class="w-full text-sm">
-                                    <thead><tr class="text-left text-xs font-bold text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><th class="p-4 text-center w-16">No</th><th class="p-4">Nama Siswa</th><th class="p-4 text-center w-40">Nilai Akhir</th><th class="p-4 text-center w-48">Capaian (TP)</th><th class="p-4 text-center w-32">Aksi</th></tr></thead>
-                                    <tbody class="divide-y divide-slate-100 bg-white">${rows}${filteredStudents.length === 0 ? `<tr><td colspan="5" class="p-8 text-center text-slate-400 italic">Tidak ada siswa di kelas ini.</td></tr>` : ''}</tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                mainContent = `<div class="max-w-6xl mx-auto space-y-6"><div class="flex flex-col md:flex-row justify-between items-end gap-4"><div><h2 class="text-2xl font-bold text-slate-800">Input Nilai Akademik</h2><p class="text-slate-500 text-sm">Masukan nilai akhir dan pilih capaian kompetensi siswa.</p></div></div><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex flex-col sm:flex-row gap-4 mb-6 pb-6 border-b border-slate-100"><div class="relative w-full sm:w-48"><i data-lucide="users" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('selectedClass', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white">${renderClassOptions()}</select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div><div class="relative w-full sm:w-64"><i data-lucide="book-open" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('selectedMapel', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white">${currentSubjects.map(m => `<option value="${m}" ${state.selectedMapel === m ? 'selected' : ''}>${m}</option>`).join('')}</select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div></div><div class="overflow-hidden rounded-xl border border-slate-100"><table class="w-full text-sm"><thead><tr class="text-left text-xs font-bold text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><th class="p-4 text-center w-16">No</th><th class="p-4">Nama Siswa</th><th class="p-4 text-center w-40">Nilai Akhir</th><th class="p-4 text-center w-48">Capaian (TP)</th><th class="p-4 text-center w-32">Aksi</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">${rows}${filteredStudents.length === 0 ? `<tr><td colspan="5" class="p-8 text-center text-slate-400 italic">Tidak ada siswa di kelas ini.</td></tr>` : ''}</tbody></table></div></div></div>`;
             } else if (state.view === 'data_siswa') {
-                const rows = filteredStudents.map((s, idx) => `
-                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                        <td class="p-4 text-center text-sm text-slate-500">${idx + 1}</td>
-                        <td class="p-4 font-bold text-slate-700">${s.name}</td>
-                        <td class="p-4 text-slate-600 font-mono text-sm">${s.nis}</td>
-                        <td class="p-4 text-center"><span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">${s.class}</span></td>
-                        <td class="p-4 text-center">
-                            <button onclick="window.actions.openDeleteModal('${s.id}')" class="group flex items-center justify-center gap-1 mx-auto bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i data-lucide="trash-2" class="w-4 h-4 group-hover:scale-110 transition-transform"></i> Hapus</button>
-                        </td>
-                    </tr>
-                `).join('');
-                mainContent = `
-                    <div class="max-w-6xl mx-auto space-y-6">
-                        <div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-2"><div><h2 class="text-2xl font-bold text-slate-800">Manajemen Data Siswa</h2><p class="text-slate-500 text-sm">Kelola data siswa, tambah baru, atau impor dari CSV.</p></div></div>
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><i data-lucide="user-plus" class="w-5 h-5"></i></div><h3 class="font-bold text-slate-800">Tambah Siswa Baru</h3></div><div class="space-y-4"><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nama Lengkap</label><input type="text" id="new-name" placeholder="Contoh: Budi Santoso" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nomor Induk (NIS)</label><input type="text" id="new-nis" placeholder="Contoh: 12345" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Kelas</label><select onchange="window.actions.updateState('selectedClass', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white transition-all">${renderClassOptions()}</select></div><button onclick="window.actions.addStudent()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 mt-2"><i data-lucide="save" class="w-4 h-4"></i> Simpan Data</button></div></div>
-                            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[600px]"><div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 pb-4 border-b border-slate-100"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600"><i data-lucide="users" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Database Siswa</h3><p class="text-xs text-slate-500">Total: ${filteredStudents.length} Siswa</p></div></div><div class="flex gap-2"><button onclick="window.actions.downloadTemplate()" class="bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-200 transition-colors flex items-center gap-1"><i data-lucide="file-down" class="w-3 h-3"></i> Template</button><div class="relative"><button onclick="window.actions.triggerImport()" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1 shadow-sm"><i data-lucide="upload" class="w-3 h-3"></i> Impor CSV</button><input type="file" id="import-file" class="hidden" accept=".csv" onchange="window.actions.processImport(this)"></div></div></div><div class="relative mb-4"><i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i><input type="text" placeholder="Cari nama atau NIS siswa..." value="${state.searchQuery}" oninput="window.actions.setSearch(this.value)" class="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"></div><div class="flex-1 overflow-y-auto custom-scrollbar border border-slate-100 rounded-xl"><table class="w-full text-sm"><thead class="sticky top-0 bg-slate-50 z-10 shadow-sm"><tr class="text-left text-xs font-bold text-slate-500 uppercase tracking-wider"><th class="p-4 text-center w-16">No</th><th class="p-4">Nama Lengkap</th><th class="p-4">NIS</th><th class="p-4 text-center">Kelas</th><th class="p-4 text-center w-24">Aksi</th></tr></thead><tbody class="divide-y divide-slate-100">${rows}${filteredStudents.length === 0 ? `<tr><td colspan="5" class="text-center p-8"><div class="flex flex-col items-center justify-center text-slate-400"><i data-lucide="search-x" class="w-12 h-12 mb-2 opacity-50"></i><p class="text-sm">Tidak ada data siswa ditemukan.</p></div></td></tr>` : ''}</tbody></table></div></div>
-                        </div>
-                    </div>
-                `;
+                const rows = filteredStudents.map((s, idx) => `<tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors"><td class="p-4 text-center text-sm text-slate-500">${idx + 1}</td><td class="p-4 font-bold text-slate-700">${s.name}</td><td class="p-4 text-slate-600 font-mono text-sm">${s.nis}</td><td class="p-4 text-center"><span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">${s.class}</span></td><td class="p-4 text-center"><button onclick="window.actions.openDeleteModal('${s.id}')" class="group flex items-center justify-center gap-1 mx-auto bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i data-lucide="trash-2" class="w-4 h-4 group-hover:scale-110 transition-transform"></i> Hapus</button></td></tr>`).join('');
+                mainContent = `<div class="max-w-6xl mx-auto space-y-6"><div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-2"><div><h2 class="text-2xl font-bold text-slate-800">Manajemen Data Siswa</h2><p class="text-slate-500 text-sm">Kelola data siswa, tambah baru, atau impor dari CSV.</p></div></div><div class="grid grid-cols-1 lg:grid-cols-3 gap-8"><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><i data-lucide="user-plus" class="w-5 h-5"></i></div><h3 class="font-bold text-slate-800">Tambah Siswa Baru</h3></div><div class="space-y-4"><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nama Lengkap</label><input type="text" id="new-name" placeholder="Contoh: Budi Santoso" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nomor Induk (NIS)</label><input type="text" id="new-nis" placeholder="Contoh: 12345" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Kelas</label><select onchange="window.actions.updateState('selectedClass', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white transition-all">${renderClassOptions()}</select></div><button onclick="window.actions.addStudent()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 mt-2"><i data-lucide="save" class="w-4 h-4"></i> Simpan Data</button></div></div><div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[600px]"><div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 pb-4 border-b border-slate-100"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600"><i data-lucide="users" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Database Siswa</h3><p class="text-xs text-slate-500">Total: ${filteredStudents.length} Siswa</p></div></div><div class="flex gap-2"><button onclick="window.actions.downloadTemplate()" class="bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-200 transition-colors flex items-center gap-1"><i data-lucide="file-down" class="w-3 h-3"></i> Template</button><div class="relative"><button onclick="window.actions.triggerImport()" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1 shadow-sm"><i data-lucide="upload" class="w-3 h-3"></i> Impor CSV</button><input type="file" id="import-file" class="hidden" accept=".csv" onchange="window.actions.processImport(this)"></div></div></div><div class="relative mb-4"><i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i><input type="text" placeholder="Cari nama atau NIS siswa..." value="${state.searchQuery}" oninput="window.actions.setSearch(this.value)" class="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"></div><div class="flex-1 overflow-y-auto custom-scrollbar border border-slate-100 rounded-xl"><table class="w-full text-sm"><thead class="sticky top-0 bg-slate-50 z-10 shadow-sm"><tr class="text-left text-xs font-bold text-slate-500 uppercase tracking-wider"><th class="p-4 text-center w-16">No</th><th class="p-4">Nama Lengkap</th><th class="p-4">NIS</th><th class="p-4 text-center">Kelas</th><th class="p-4 text-center w-24">Aksi</th></tr></thead><tbody class="divide-y divide-slate-100">${rows}${filteredStudents.length === 0 ? `<tr><td colspan="5" class="text-center p-8"><div class="flex flex-col items-center justify-center text-slate-400"><i data-lucide="search-x" class="w-12 h-12 mb-2 opacity-50"></i><p class="text-sm">Tidak ada data siswa ditemukan.</p></div></td></tr>` : ''}</tbody></table></div></div></div></div>`;
             } else if (state.view === 'tp_settings') {
                 const tps = state.learningObjectives.filter(l => l.level === state.tpLevel && l.mapel === state.tpMapel);
                 const tpRows = tps.map(t => `<tr class="border-b hover:bg-slate-50 transition-colors"><td class="p-4 font-mono font-bold text-blue-600 align-top text-sm w-24">${t.code}</td><td class="p-4 align-top text-justify text-slate-600 text-sm leading-relaxed">${t.description}</td><td class="p-4 text-center align-top w-24"><button onclick="window.actions.openDeleteTPModal('${t.id}')" class="group flex items-center justify-center gap-1 mx-auto bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i data-lucide="trash-2" class="w-4 h-4 group-hover:scale-110 transition-transform"></i> Hapus</button></td></tr>`).join('');
-                mainContent = `
-                    <div class="max-w-6xl mx-auto space-y-6">
-                        <div class="flex flex-col md:flex-row justify-between items-end gap-4"><div><h2 class="text-2xl font-bold text-slate-800">Data Tujuan Pembelajaran</h2><p class="text-slate-500 text-sm">Kelola deskripsi capaian pembelajaran per mata pelajaran.</p></div></div>
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                            <div class="flex flex-col sm:flex-row gap-4 mb-6 pb-6 border-b border-slate-100"><div class="relative w-full sm:w-48"><i data-lucide="layers" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('tpLevel', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white"><option value="7" ${state.tpLevel==='7'?'selected':''}>Tingkat 7</option><option value="8" ${state.tpLevel==='8'?'selected':''}>Tingkat 8</option><option value="9" ${state.tpLevel==='9'?'selected':''}>Tingkat 9</option></select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div><div class="relative w-full sm:w-64"><i data-lucide="book-open" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('tpMapel', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white">${["Pendidikan Agama", "Pendidikan Pancasila", "Bahasa Indonesia", "Matematika", "IPA", "IPS", "Bahasa Inggris", "PJOK", "Informatika", "Prakarya", "Seni Budaya", "Koding", "Bahasa Jawa"].map(m => `<option value="${m}" ${state.tpMapel === m ? 'selected' : ''}>${m}</option>`).join('')}</select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div></div>
-                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                <div class="h-fit"><div class="bg-slate-50 p-5 rounded-xl border border-slate-200"><h4 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="plus-circle" class="w-4 h-4 text-blue-600"></i> Tambah TP Baru</h4><div class="space-y-3"><div><input type="text" id="tp-code" placeholder="Kode (mis: TP.1)" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all bg-white"></div><div><textarea id="tp-desc" placeholder="Deskripsi kompetensi yang dicapai..." class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all h-32 resize-none bg-white"></textarea></div><button onclick="window.actions.addTP()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-bold shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 text-sm"><i data-lucide="save" class="w-4 h-4"></i> Simpan TP</button></div></div></div>
-                                <div class="lg:col-span-2"><div class="overflow-hidden rounded-xl border border-slate-100"><table class="w-full text-sm"><thead><tr class="bg-slate-50 text-left border-b border-slate-200"><th class="p-4 font-bold text-slate-500 uppercase text-xs">Kode</th><th class="p-4 font-bold text-slate-500 uppercase text-xs">Deskripsi</th><th class="p-4 font-bold text-slate-500 uppercase text-xs text-center">Aksi</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">${tpRows}${tps.length === 0 ? `<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Belum ada data TP untuk mata pelajaran ini.</td></tr>` : ''}</tbody></table></div></div>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                mainContent = `<div class="max-w-6xl mx-auto space-y-6"><div class="flex flex-col md:flex-row justify-between items-end gap-4"><div><h2 class="text-2xl font-bold text-slate-800">Data Tujuan Pembelajaran</h2><p class="text-slate-500 text-sm">Kelola deskripsi capaian pembelajaran per mata pelajaran.</p></div></div><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex flex-col sm:flex-row gap-4 mb-6 pb-6 border-b border-slate-100"><div class="relative w-full sm:w-48"><i data-lucide="layers" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('tpLevel', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white"><option value="7" ${state.tpLevel==='7'?'selected':''}>Tingkat 7</option><option value="8" ${state.tpLevel==='8'?'selected':''}>Tingkat 8</option><option value="9" ${state.tpLevel==='9'?'selected':''}>Tingkat 9</option></select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div><div class="relative w-full sm:w-64"><i data-lucide="book-open" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('tpMapel', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white">${["Pendidikan Agama", "Pendidikan Pancasila", "Bahasa Indonesia", "Matematika", "IPA", "IPS", "Bahasa Inggris", "PJOK", "Informatika", "Prakarya", "Seni Budaya", "Koding", "Bahasa Jawa"].map(m => `<option value="${m}" ${state.tpMapel === m ? 'selected' : ''}>${m}</option>`).join('')}</select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div></div><div class="grid grid-cols-1 lg:grid-cols-3 gap-8"><div class="h-fit"><div class="bg-slate-50 p-5 rounded-xl border border-slate-200"><h4 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="plus-circle" class="w-4 h-4 text-blue-600"></i> Tambah TP Baru</h4><div class="space-y-3"><div><input type="text" id="tp-code" placeholder="Kode (mis: TP.1)" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all bg-white"></div><div><textarea id="tp-desc" placeholder="Deskripsi kompetensi yang dicapai..." class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all h-32 resize-none bg-white"></textarea></div><button onclick="window.actions.addTP()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-bold shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 text-sm"><i data-lucide="save" class="w-4 h-4"></i> Simpan TP</button></div></div></div><div class="lg:col-span-2"><div class="overflow-hidden rounded-xl border border-slate-100"><table class="w-full text-sm"><thead><tr class="bg-slate-50 text-left border-b border-slate-200"><th class="p-4 font-bold text-slate-500 uppercase text-xs">Kode</th><th class="p-4 font-bold text-slate-500 uppercase text-xs">Deskripsi</th><th class="p-4 font-bold text-slate-500 uppercase text-xs text-center">Aksi</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">${tpRows}${tps.length === 0 ? `<tr><td colspan="3" class="p-8 text-center text-slate-400 italic">Belum ada data TP untuk mata pelajaran ini.</td></tr>` : ''}</tbody></table></div></div></div></div></div>`;
             } else if (state.view === 'cetak') {
                  const homeroom = state.homerooms.find(h => h.id === state.selectedClass) || { name: '', nip: '' };
                 const rows = classStudents.map((s, idx) => {
                     const att = state.attendance.find(a => a.studentId === s.id) || { s: 0, i: 0, a: 0 };
                     const note = state.teacherNotes.find(n => n.studentId === s.id) || { text: '' };
-                    return `<tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                        <td class="p-4 text-center text-sm text-slate-500">${idx + 1}</td>
-                        <td class="p-4 font-bold text-slate-700">${s.name}</td>
-                        <td class="p-4">
-                            <div class="flex items-center gap-2 justify-center bg-slate-50 p-1.5 rounded-lg border border-slate-200 w-fit mx-auto">
-                                <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400 mb-0.5">S</span><input type="number" value="${att.s}" onchange="window.actions.updateAttendance('${s.id}','s',this)" class="w-8 p-1 border rounded text-center text-xs focus:ring-1 focus:ring-blue-500 font-bold" placeholder="0"></div>
-                                <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400 mb-0.5">I</span><input type="number" value="${att.i}" onchange="window.actions.updateAttendance('${s.id}','i',this)" class="w-8 p-1 border rounded text-center text-xs focus:ring-1 focus:ring-blue-500 font-bold" placeholder="0"></div>
-                                <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400 mb-0.5">A</span><input type="number" value="${att.a}" onchange="window.actions.updateAttendance('${s.id}','a',this)" class="w-8 p-1 border rounded text-center text-xs focus:ring-1 focus:ring-blue-500 font-bold" placeholder="0"></div>
-                            </div>
-                        </td>
-                        <td class="p-4">
-                            <div class="relative group">
-                                <textarea id="note-${s.id}" onchange="window.actions.updateTeacherNote('${s.id}',this)" class="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none min-h-[80px] resize-none transition-all pr-8" placeholder="Tulis catatan...">${note.text}</textarea>
-                                <button id="btn-analyze-${s.id}" onclick="window.actions.generateStudentAnalysis('${s.id}')" class="absolute right-2 bottom-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white p-1.5 rounded-lg hover:shadow-md transition-all active:scale-95 opacity-80 hover:opacity-100" title="Generate Analisa AI">
-                                    <i data-lucide="sparkles" class="w-3 h-3"></i>
-                                </button>
-                            </div>
-                        </td>
-                        <td class="p-4 text-center">
-                            <div class="flex flex-col gap-2">
-                                <button onclick="window.actions.saveStudentData('${s.id}')" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 w-full"><i data-lucide="save" class="w-3 h-3"></i> Simpan</button>
-                                <button onclick="window.actions.printRapor('${s.id}')" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 w-full"><i data-lucide="printer" class="w-3 h-3"></i> Cetak</button>
-                            </div>
-                        </td>
-                    </tr>`;
+                    return `<tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors"><td class="p-4 text-center text-sm text-slate-500">${idx + 1}</td><td class="p-4 font-bold text-slate-700">${s.name}</td><td class="p-4"><div class="flex items-center gap-2 justify-center bg-slate-50 p-1.5 rounded-lg border border-slate-200 w-fit mx-auto"><div class="flex flex-col items-center"><span class="text-[10px] text-slate-400 mb-0.5">S</span><input type="number" value="${att.s}" onchange="window.actions.updateAttendance('${s.id}','s',this)" class="w-8 p-1 border rounded text-center text-xs focus:ring-1 focus:ring-blue-500 font-bold" placeholder="0"></div><div class="flex flex-col items-center"><span class="text-[10px] text-slate-400 mb-0.5">I</span><input type="number" value="${att.i}" onchange="window.actions.updateAttendance('${s.id}','i',this)" class="w-8 p-1 border rounded text-center text-xs focus:ring-1 focus:ring-blue-500 font-bold" placeholder="0"></div><div class="flex flex-col items-center"><span class="text-[10px] text-slate-400 mb-0.5">A</span><input type="number" value="${att.a}" onchange="window.actions.updateAttendance('${s.id}','a',this)" class="w-8 p-1 border rounded text-center text-xs focus:ring-1 focus:ring-blue-500 font-bold" placeholder="0"></div></div></td><td class="p-4"><div class="relative group"><textarea id="note-${s.id}" onchange="window.actions.updateTeacherNote('${s.id}',this)" class="w-full p-3 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-none min-h-[80px] resize-none transition-all pr-8" placeholder="Tulis catatan...">${note.text}</textarea><button id="btn-analyze-${s.id}" onclick="window.actions.generateStudentAnalysis('${s.id}')" class="absolute right-2 bottom-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white p-1.5 rounded-lg hover:shadow-md transition-all active:scale-95 opacity-80 hover:opacity-100" title="Generate Analisa AI"><i data-lucide="sparkles" class="w-3 h-3"></i></button></div></td><td class="p-4 text-center"><div class="flex flex-col gap-2"><button onclick="window.actions.saveStudentData('${s.id}')" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 w-full"><i data-lucide="save" class="w-3 h-3"></i> Simpan</button><button onclick="window.actions.printRapor('${s.id}')" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 w-full"><i data-lucide="printer" class="w-3 h-3"></i> Cetak</button></div></td></tr>`;
                 }).join('');
-
-                mainContent = `
-                    <div class="max-w-6xl mx-auto space-y-6">
-                        <div class="flex flex-col md:flex-row justify-between items-end gap-4"><div><h2 class="text-2xl font-bold text-slate-800">Cetak Rapor & Leger</h2><p class="text-slate-500 text-sm">Unduh laporan hasil belajar siswa dan rekap nilai.</p></div></div>
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8 pb-6 border-b border-slate-100"><div class="relative w-full lg:w-64"><i data-lucide="users" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('selectedClass', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white">${renderClassOptions()}</select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div><div class="flex flex-wrap gap-3 w-full lg:w-auto"><button onclick="window.actions.printAllRapor()" class="flex-1 lg:flex-none bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30 font-bold transition-all active:scale-95 text-sm"><i data-lucide="files" class="w-4 h-4"></i> Cetak Semua Rapor</button><button onclick="window.actions.printLeger()" class="flex-1 lg:flex-none bg-emerald-600 text-white px-5 py-2.5 rounded-xl hover:bg-emerald-700 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 font-bold transition-all active:scale-95 text-sm"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Cetak Leger</button></div></div>
-                            <div class="bg-amber-50 border border-amber-100 p-4 rounded-xl mb-6 flex flex-col md:flex-row gap-4 items-end"><div class="flex-1 w-full"><label class="block text-xs font-bold text-amber-800 uppercase mb-1">Nama Wali Kelas</label><input type="text" value="${homeroom.name}" onchange="window.actions.updateHomeroomLocal('${state.selectedClass}','name',this.value)" class="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none bg-white"></div><div class="flex-1 w-full"><label class="block text-xs font-bold text-amber-800 uppercase mb-1">NIP Wali Kelas</label><input type="text" value="${homeroom.nip}" onchange="window.actions.updateHomeroomLocal('${state.selectedClass}','nip',this.value)" class="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none bg-white"></div><button onclick="window.actions.saveHomeroom('${state.selectedClass}')" class="w-full md:w-auto bg-amber-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-amber-700 text-sm flex items-center justify-center gap-1"><i data-lucide="check" class="w-4 h-4"></i> Simpan</button></div>
-                            <div class="overflow-hidden rounded-xl border border-slate-100"><table class="w-full text-sm"><thead><tr class="text-left text-xs font-bold text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><th class="p-4 w-12 text-center">No</th><th class="p-4">Nama Siswa</th><th class="p-4 w-64 text-center">Absensi (S / I / A)</th><th class="p-4">Catatan Wali Kelas</th><th class="p-4 w-32 text-center">Aksi</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">${rows}${classStudents.length === 0 ? `<tr><td colspan="5" class="p-8 text-center text-slate-400 italic">Tidak ada siswa di kelas ini.</td></tr>` : ''}</tbody></table></div>
-                        </div>
-                    </div>
-                `;
+                mainContent = `<div class="max-w-6xl mx-auto space-y-6"><div class="flex flex-col md:flex-row justify-between items-end gap-4"><div><h2 class="text-2xl font-bold text-slate-800">Cetak Rapor & Leger</h2><p class="text-slate-500 text-sm">Unduh laporan hasil belajar siswa dan rekap nilai.</p></div></div><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8 pb-6 border-b border-slate-100"><div class="relative w-full lg:w-64"><i data-lucide="users" class="absolute left-3 top-3 w-4 h-4 text-slate-400"></i><select onchange="window.actions.updateState('selectedClass', this.value)" class="w-full pl-10 pr-4 py-2.5 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-600 appearance-none bg-white">${renderClassOptions()}</select><i data-lucide="chevron-down" class="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none"></i></div><div class="flex flex-wrap gap-3 w-full lg:w-auto"><button onclick="window.actions.printAllRapor()" class="flex-1 lg:flex-none bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30 font-bold transition-all active:scale-95 text-sm"><i data-lucide="files" class="w-4 h-4"></i> Cetak Semua Rapor</button><button onclick="window.actions.printLeger()" class="flex-1 lg:flex-none bg-emerald-600 text-white px-5 py-2.5 rounded-xl hover:bg-emerald-700 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 font-bold transition-all active:scale-95 text-sm"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Cetak Leger</button></div></div><div class="bg-amber-50 border border-amber-100 p-4 rounded-xl mb-6 flex flex-col md:flex-row gap-4 items-end"><div class="flex-1 w-full"><label class="block text-xs font-bold text-amber-800 uppercase mb-1">Nama Wali Kelas</label><input type="text" value="${homeroom.name}" onchange="window.actions.updateHomeroomLocal('${state.selectedClass}','name',this.value)" class="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none bg-white"></div><div class="flex-1 w-full"><label class="block text-xs font-bold text-amber-800 uppercase mb-1">NIP Wali Kelas</label><input type="text" value="${homeroom.nip}" onchange="window.actions.updateHomeroomLocal('${state.selectedClass}','nip',this.value)" class="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none bg-white"></div><button onclick="window.actions.saveHomeroom('${state.selectedClass}')" class="w-full md:w-auto bg-amber-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-amber-700 text-sm flex items-center justify-center gap-1"><i data-lucide="check" class="w-4 h-4"></i> Simpan</button></div><div class="overflow-hidden rounded-xl border border-slate-100"><table class="w-full text-sm"><thead><tr class="text-left text-xs font-bold text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><th class="p-4 w-12 text-center">No</th><th class="p-4">Nama Siswa</th><th class="p-4 w-64 text-center">Absensi (S / I / A)</th><th class="p-4">Catatan Wali Kelas</th><th class="p-4 w-32 text-center">Aksi</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">${rows}${classStudents.length === 0 ? `<tr><td colspan="5" class="p-8 text-center text-slate-400 italic">Tidak ada siswa di kelas ini.</td></tr>` : ''}</tbody></table></div></div></div>`;
             } else if (state.view === 'settings') {
-                mainContent = `
-                    <div class="max-w-4xl mx-auto">
-                        <div class="mb-8 flex justify-between items-end"><div><h2 class="text-2xl font-bold text-slate-800">Pengaturan Aplikasi</h2><p class="text-slate-500 text-sm">Kelola data sekolah, identitas kop surat, dan konfigurasi tahun ajaran.</p></div><button onclick="window.actions.saveSettings()" id="btn-save-settings" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transition-all active:scale-95"><i data-lucide="save" class="w-5 h-5"></i> Simpan Perubahan</button></div>
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><i data-lucide="building-2" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Identitas Sekolah</h3><p class="text-xs text-slate-500">Informasi utama untuk kop surat.</p></div></div><div class="space-y-4"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Nama Dinas (Baris 1)</label><input type="text" value="${state.settings.dinasName}" onchange="window.actions.updateSettingVal('dinasName', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="Contoh: PEMERINTAH KABUPATEN KLATEN"></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">Nama Sekolah (Baris 2)</label><input type="text" value="${state.settings.schoolName}" onchange="window.actions.updateSettingVal('schoolName', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="Contoh: SMP NEGERI 2 CEPER"></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">Alamat Lengkap</label><textarea onchange="window.actions.updateSettingVal('schoolAddress', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm h-24 resize-none">${state.settings.schoolAddress}</textarea></div></div></div>
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600"><i data-lucide="calendar-range" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Tahun Ajaran & Pimpinan</h3><p class="text-xs text-slate-500">Periode aktif dan penandatangan.</p></div></div><div class="grid grid-cols-2 gap-4 mb-4"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Semester</label><select onchange="window.actions.updateSettingVal('semester', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white"><option value="Ganjil" ${state.settings.semester==='Ganjil'?'selected':''}>Ganjil</option><option value="Genap" ${state.settings.semester==='Genap'?'selected':''}>Genap</option></select></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">Tahun Pelajaran</label><input type="text" value="${state.settings.year}" onchange="window.actions.updateSettingVal('year', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm" placeholder="2024/2025"></div></div><div class="space-y-4"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Nama Kepala Sekolah</label><div class="relative"><i data-lucide="user" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i><input type="text" value="${state.settings.headmaster}" onchange="window.actions.updateSettingVal('headmaster', this.value)" class="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"></div></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">NIP Kepala Sekolah</label><div class="relative"><i data-lucide="badge-check" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i><input type="text" value="${state.settings.headmasterNip}" onchange="window.actions.updateSettingVal('headmasterNip', this.value)" class="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"></div></div></div></div>
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-violet-50 flex items-center justify-center text-violet-600"><i data-lucide="map-pin" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Konfigurasi Cetak</h3><p class="text-xs text-slate-500">Tempat, tanggal, dan logo rapor.</p></div></div><div class="grid grid-cols-2 gap-6 mb-6"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Tempat TTD</label><input type="text" value="${state.settings.printPlace}" onchange="window.actions.updateSettingVal('printPlace', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">Tanggal Rapor</label><input type="text" value="${state.settings.printDate}" onchange="window.actions.updateSettingVal('printDate', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm" placeholder="20 Desember 2024"></div></div><div class="grid grid-cols-2 gap-6 pt-4 border-t border-slate-100"><div><label class="block text-sm font-semibold text-slate-700 mb-2">Logo Dinas</label><input type="file" onchange="window.actions.handleLogoUpload('logoDinas', this)" class="text-xs w-full mb-2">${state.settings.logoDinas ? `<div class="h-20 border rounded bg-slate-50 flex items-center justify-center"><img src="${state.settings.logoDinas}" class="h-16"></div>` : ''}</div><div><label class="block text-sm font-semibold text-slate-700 mb-2">Logo Sekolah</label><input type="file" onchange="window.actions.handleLogoUpload('logoSekolah', this)" class="text-xs w-full mb-2">${state.settings.logoSekolah ? `<div class="h-20 border rounded bg-slate-50 flex items-center justify-center"><img src="${state.settings.logoSekolah}" class="h-16"></div>` : ''}</div></div></div>
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600"><i data-lucide="sparkles" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Integrasi AI</h3><p class="text-xs text-slate-500">Konfigurasi Google Gemini AI.</p></div></div><div class="space-y-4"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Gemini API Key</label><div class="relative"><i data-lucide="key" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i><input type="password" value="${state.settings.geminiApiKey || ''}" onchange="window.actions.updateSettingVal('geminiApiKey', this.value)" class="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="Masukkan API Key Gemini..."></div><p class="text-[10px] text-slate-400 mt-1 italic">Dapatkan API Key di Google AI Studio untuk mengaktifkan fitur analisa otomatis.</p></div></div></div>
-                        </div>
-                    </div>
-                `;
+                mainContent = `<div class="max-w-4xl mx-auto"><div class="mb-8 flex justify-between items-end"><div><h2 class="text-2xl font-bold text-slate-800">Pengaturan Aplikasi</h2><p class="text-slate-500 text-sm">Kelola data sekolah, identitas kop surat, dan konfigurasi tahun ajaran.</p></div><button onclick="window.actions.saveSettings()" id="btn-save-settings" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transition-all active:scale-95"><i data-lucide="save" class="w-5 h-5"></i> Simpan Perubahan</button></div><div class="grid grid-cols-1 lg:grid-cols-2 gap-8"><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><i data-lucide="building-2" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Identitas Sekolah</h3><p class="text-xs text-slate-500">Informasi utama untuk kop surat.</p></div></div><div class="space-y-4"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Nama Dinas (Baris 1)</label><input type="text" value="${state.settings.dinasName}" onchange="window.actions.updateSettingVal('dinasName', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="Contoh: PEMERINTAH KABUPATEN KLATEN"></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">Nama Sekolah (Baris 2)</label><input type="text" value="${state.settings.schoolName}" onchange="window.actions.updateSettingVal('schoolName', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" placeholder="Contoh: SMP NEGERI 2 CEPER"></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">Alamat Lengkap</label><textarea onchange="window.actions.updateSettingVal('schoolAddress', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm h-24 resize-none">${state.settings.schoolAddress}</textarea></div></div></div><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600"><i data-lucide="calendar-range" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Tahun Ajaran & Pimpinan</h3><p class="text-xs text-slate-500">Periode aktif dan penandatangan.</p></div></div><div class="grid grid-cols-2 gap-4 mb-4"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Semester</label><select onchange="window.actions.updateSettingVal('semester', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white"><option value="Ganjil" ${state.settings.semester==='Ganjil'?'selected':''}>Ganjil</option><option value="Genap" ${state.settings.semester==='Genap'?'selected':''}>Genap</option></select></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">Tahun Pelajaran</label><input type="text" value="${state.settings.year}" onchange="window.actions.updateSettingVal('year', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm" placeholder="2024/2025"></div></div><div class="space-y-4"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Nama Kepala Sekolah</label><div class="relative"><i data-lucide="user" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i><input type="text" value="${state.settings.headmaster}" onchange="window.actions.updateSettingVal('headmaster', this.value)" class="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"></div></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">NIP Kepala Sekolah</label><div class="relative"><i data-lucide="badge-check" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i><input type="text" value="${state.settings.headmasterNip}" onchange="window.actions.updateSettingVal('headmasterNip', this.value)" class="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"></div></div></div></div><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 lg:col-span-2"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-violet-50 flex items-center justify-center text-violet-600"><i data-lucide="map-pin" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Konfigurasi Cetak</h3><p class="text-xs text-slate-500">Tempat, tanggal, dan logo rapor.</p></div></div><div class="grid grid-cols-2 gap-6 mb-6"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Tempat TTD</label><input type="text" value="${state.settings.printPlace}" onchange="window.actions.updateSettingVal('printPlace', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"></div><div><label class="block text-sm font-semibold text-slate-700 mb-1">Tanggal Rapor</label><input type="text" value="${state.settings.printDate}" onchange="window.actions.updateSettingVal('printDate', this.value)" class="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm" placeholder="20 Desember 2024"></div></div><div class="grid grid-cols-2 gap-6 pt-4 border-t border-slate-100"><div><label class="block text-sm font-semibold text-slate-700 mb-2">Logo Dinas</label><input type="file" onchange="window.actions.handleLogoUpload('logoDinas', this)" class="text-xs w-full mb-2">${state.settings.logoDinas ? `<div class="h-20 border rounded bg-slate-50 flex items-center justify-center"><img src="${state.settings.logoDinas}" class="h-16"></div>` : ''}</div><div><label class="block text-sm font-semibold text-slate-700 mb-2">Logo Sekolah</label><input type="file" onchange="window.actions.handleLogoUpload('logoSekolah', this)" class="text-xs w-full mb-2">${state.settings.logoSekolah ? `<div class="h-20 border rounded bg-slate-50 flex items-center justify-center"><img src="${state.settings.logoSekolah}" class="h-16"></div>` : ''}</div></div></div><div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600"><i data-lucide="sparkles" class="w-5 h-5"></i></div><div><h3 class="font-bold text-slate-800">Integrasi AI</h3><p class="text-xs text-slate-500">Konfigurasi Google Gemini AI.</p></div></div><div class="space-y-4"><div><label class="block text-sm font-semibold text-slate-700 mb-1">Gemini API Key</label><div class="relative"><i data-lucide="key" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i><input type="password" value="${state.settings.geminiApiKey || ''}" onchange="window.actions.updateSettingVal('geminiApiKey', this.value)" class="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="Masukkan API Key Gemini..."></div><p class="text-[10px] text-slate-400 mt-1 italic">Dapatkan API Key di Google AI Studio untuk mengaktifkan fitur analisa otomatis.</p></div></div></div></div></div>`;
             }
 
             // --- ADMIN SIDEBAR GROUPING ---
-            const navGroups = [
-                {
-                    title: 'Menu Utama',
-                    items: [
-                        { id: 'dashboard', label: 'Dashboard', icon: 'layout-grid' }
-                    ]
-                },
-                {
-                    title: 'Akademik',
-                    items: [
-                        { id: 'data_siswa', label: 'Data Siswa', icon: 'graduation-cap' },
-                        { id: 'input_nilai', label: 'Input Nilai', icon: 'clipboard-edit' },
-                        { id: 'tp_settings', label: 'Data TP', icon: 'book-open-check' },
-                        { id: 'cetak', label: 'Cetak & Leger', icon: 'printer' }
-                    ]
-                },
-                {
-                    title: 'Sistem',
-                    items: [
-                        { id: 'settings', label: 'Pengaturan', icon: 'settings-2' }
-                    ]
-                }
-            ];
-
-            const sidebarLinks = navGroups.map(group => `
-                <div class="mb-4">
-                    <h3 class="px-4 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">${group.title}</h3>
-                    <div class="space-y-1">
-                        ${group.items.map(item => `
-                            <button onclick="window.actions.navigate('${item.id}')" class="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${state.view === item.id ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}">
-                                <i data-lucide="${item.icon}" class="w-4 h-4"></i>
-                                ${item.label}
-                            </button>
-                        `).join('')}
-                    </div>
-                </div>
-            `).join('');
+            const navGroups = [{title: 'Menu Utama', items: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-grid' }]}, {title: 'Akademik', items: [{ id: 'data_siswa', label: 'Data Siswa', icon: 'graduation-cap' }, { id: 'input_nilai', label: 'Input Nilai', icon: 'clipboard-edit' }, { id: 'tp_settings', label: 'Data TP', icon: 'book-open-check' }, { id: 'cetak', label: 'Cetak & Leger', icon: 'printer' }]}, {title: 'Sistem', items: [{ id: 'settings', label: 'Pengaturan', icon: 'settings-2' }]}];
+            const sidebarLinks = navGroups.map(group => `<div class="mb-4"><h3 class="px-4 mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">${group.title}</h3><div class="space-y-1">${group.items.map(item => `<button onclick="window.actions.navigate('${item.id}')" class="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${state.view === item.id ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}"><i data-lucide="${item.icon}" class="w-4 h-4"></i>${item.label}</button>`).join('')}</div></div>`).join('');
 
             root.innerHTML = `
                 <div class="flex h-screen bg-slate-50 overflow-hidden">
                     <!-- Sidebar -->
                     <aside class="w-64 bg-slate-900 border-r border-slate-800 flex-shrink-0 flex flex-col hidden md:flex z-10">
-                        <div class="p-6 border-b border-slate-800 flex items-center gap-3">
-                             <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">R</div>
-                             <h1 class="font-bold text-white tracking-tight">E-RAPOR ADMIN</h1>
-                        </div>
-                        <nav class="flex-1 p-4 overflow-y-auto">
-                            ${sidebarLinks}
-                        </nav>
-                        <div class="p-4 border-t border-slate-800">
-                             <button onclick="window.actions.logout()" class="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-800 rounded-lg font-bold transition-colors">
-                                <i data-lucide="log-out" class="w-4 h-4"></i> Keluar
-                            </button>
-                        </div>
+                        <div class="p-6 border-b border-slate-800 flex items-center gap-3"><div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">R</div><h1 class="font-bold text-white tracking-tight">E-RAPOR ADMIN</h1></div>
+                        <nav class="flex-1 p-4 overflow-y-auto">${sidebarLinks}</nav>
+                        <div class="p-4 border-t border-slate-800"><button onclick="window.actions.logout()" class="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-800 rounded-lg font-bold transition-colors"><i data-lucide="log-out" class="w-4 h-4"></i> Keluar</button></div>
                     </aside>
-
                     <!-- Main Content -->
                     <main class="flex-1 flex flex-col h-full overflow-hidden relative">
-                        ${state.view !== 'student_dashboard' && state.view !== 'student-login' && state.view !== 'landing' ? `
-                            <header class="bg-white border-b border-slate-200 p-4 flex justify-between items-center md:hidden">
-                                <div class="font-bold text-slate-800">E-RAPOR ADMIN</div>
-                                <button onclick="window.actions.logout()" class="text-red-600"><i data-lucide="log-out" class="w-5 h-5"></i></button>
-                            </header>
-                        ` : ''}
-                        
-                        <div class="flex-1 overflow-auto ${state.view !== 'student_dashboard' && state.view !== 'student-login' && state.view !== 'landing' ? 'p-4 md:p-8' : ''}">
-                            ${mainContent}
-                        </div>
+                        ${state.view !== 'student_dashboard' && state.view !== 'student-login' && state.view !== 'landing' ? `<header class="bg-white border-b border-slate-200 p-4 flex justify-between items-center md:hidden"><div class="font-bold text-slate-800">E-RAPOR ADMIN</div><button onclick="window.actions.logout()" class="text-red-600"><i data-lucide="log-out" class="w-5 h-5"></i></button></header>` : ''}
+                        <div class="flex-1 overflow-auto ${state.view !== 'student_dashboard' && state.view !== 'student-login' && state.view !== 'landing' ? 'p-4 md:p-8' : ''}">${mainContent}</div>
                         ${modalHtml}
+                        ${state.showDeleteModal ? `<div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"><div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm"><div class="flex items-center gap-3 text-red-600 mb-4"><div class="bg-red-100 p-3 rounded-full"><i data-lucide="trash-2" class="w-6 h-6"></i></div><h3 class="text-lg font-bold text-slate-800">Hapus Siswa?</h3></div><p class="text-slate-600 mb-6 text-sm">Apakah Anda yakin ingin menghapus data siswa ini? Tindakan ini tidak dapat dibatalkan.</p><div class="flex gap-3"><button onclick="window.actions.closeDeleteModal()" class="flex-1 px-4 py-2 border border-slate-300 text-slate-700 font-bold rounded-lg hover:bg-slate-50">Batal</button><button onclick="window.actions.confirmDelete()" class="flex-1 px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700">Ya, Hapus</button></div></div></div>` : ''}
+                        ${state.showDeleteTPModal ? `<div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"><div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm"><div class="flex items-center gap-3 text-red-600 mb-4"><div class="bg-red-100 p-3 rounded-full"><i data-lucide="trash-2" class="w-6 h-6"></i></div><h3 class="text-lg font-bold text-slate-800">Hapus TP?</h3></div><p class="text-slate-600 mb-6 text-sm">Apakah Anda yakin ingin menghapus Tujuan Pembelajaran ini? Tindakan ini tidak dapat dibatalkan.</p><div class="flex gap-3"><button onclick="window.actions.closeDeleteTPModal()" class="flex-1 px-4 py-2 border border-slate-300 text-slate-700 font-bold rounded-lg hover:bg-slate-50">Batal</button><button onclick="window.actions.confirmDeleteTP()" class="flex-1 px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700">Ya, Hapus</button></div></div></div>` : ''}
+                        ${state.showModal && state.activeStudentId ? (() => {
+                             const availableTPs = state.learningObjectives.filter(l => l.mapel === state.selectedMapel && l.level === state.selectedClass.charAt(0));
+                             const tpList = availableTPs.length > 0 ? availableTPs.map(tp => `<div class="flex items-start gap-2 mb-2 p-2 border rounded hover:bg-slate-50"><div class="w-1/2"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" ${state.tempAchieved.includes(tp.code) ? 'checked' : ''} onchange="window.actions.toggleTP('${tp.code}', 'achieved')" class="w-4 h-4 text-green-600 rounded"><span class="text-xs font-bold text-green-700">Tercapai</span></label></div><div class="w-1/2"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" ${state.tempImprove.includes(tp.code) ? 'checked' : ''} onchange="window.actions.toggleTP('${tp.code}', 'improve')" class="w-4 h-4 text-orange-600 rounded"><span class="text-xs font-bold text-orange-700">Perlu Bimbingan</span></label></div><div class="flex-1 text-xs"><span class="font-bold text-slate-700">${tp.code}</span>: ${tp.description}</div></div>`).join('') : '<p class="text-slate-500 text-sm italic">Belum ada data TP untuk mapel ini. Tambahkan di menu Data TP.</p>';
+                             return `<div class="fixed inset-0 z-50 flex items-center justify-center modal-overlay"><div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden"><div class="bg-blue-600 p-4 flex justify-between items-center text-white"><h3 class="font-bold">Pilih Capaian Kompetensi (TP)</h3><button onclick="window.actions.closeModal()" class="hover:text-blue-200"><i data-lucide="x" class="w-5 h-5"></i></button></div><div class="p-4 max-h-[60vh] overflow-y-auto">${tpList}</div><div class="p-4 bg-slate-50 border-t flex justify-end gap-2"><button onclick="window.actions.closeModal()" class="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded">Batal</button><button onclick="window.actions.saveTPSelection()" class="px-4 py-2 bg-blue-600 text-white font-bold hover:bg-blue-700 rounded">Simpan</button></div></div></div>`;
+                        })() : ''}
                         ${state.toast.show ? `<div class="fixed bottom-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-bold animate-bounce ${state.toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'}">${state.toast.message}</div>` : ''}
                     </main>
                 </div>
