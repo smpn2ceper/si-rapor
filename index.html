@@ -408,7 +408,7 @@
             // --- UPDATED VERIFY LOGIN FOR ROLES ---
             verifyLogin: () => { 
                 const input = document.getElementById('admin-password-input').value; 
-                if (input === "Admin@12345") { 
+                if (input === "Admin@*12345*") { 
                     state.role = 'admin'; 
                     state.showLoginModal = false; 
                     window.actions.navigate('dashboard'); 
@@ -1184,3 +1184,4 @@
     </script>
 </body>
 </html>
+
